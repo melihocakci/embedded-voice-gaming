@@ -22,6 +22,7 @@ def recognize_worker():
         if audio is None:
             break  # stop processing if the main thread is done
 
+        print("processing...")
         # received audio data, now we'll recognize it using Google Speech Recognition
         try:
             # for testing purposes, we're just using the default API key
