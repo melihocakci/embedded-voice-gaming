@@ -2,12 +2,18 @@
 
 # NOTE: this example requires PyAudio because it uses the Microphone class
 
+import speech_recognition as sr
 from threading import Thread
 from queue import Queue  # Python 3 import
 import subprocess
 import time
+import RPi.GPIO as GPIO
 
-import speech_recognition as sr
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
+GPIO.setup(17, GPIO.OUT)
+GPIO.setup(27, GPIO.OUT)
 
 
 r = sr.Recognizer()
@@ -22,6 +28,7 @@ def recognize_worker():
         if audio is None:
             break  # stop processing if the main thread is done
 
+        GPIO.output(27, GPIO.HIGH)
         print("processing...")
         # received audio data, now we'll recognize it using Google Speech Recognition
         try:
@@ -46,6 +53,7 @@ def recognize_worker():
                 "Could not request results from Google Speech Recognition service; {0}".format(e))
 
         audio_queue.task_done()  # mark the audio processing job as completed in the queue
+        GPIO.output(27, GPIO.LOW)
 
 
 # start a new thread to recognize audio, while this thread focuses on listening
@@ -55,15 +63,19 @@ recognize_thread.start()
 with sr.Microphone() as source:
     try:
         while True:  # repeatedly listen for phrases and put the resulting audio on the audio processing job queue
+            GPIO.output(17, GPIO.HIGH)
             try:
                 print('listening...')
-                rec = r.listen(source, timeout=0.5, phrase_time_limit=10)
+                rec = r.listen(source, timeout=1, phrase_time_limit=10)
                 audio_queue.put(rec)
             except sr.WaitTimeoutError:
                 print('timeout reached')
+            GPIO.output(17, GPIO.LOW)
+            time.sleep(1)
     except KeyboardInterrupt:  # allow Ctrl + C to shut down the program
         pass
 
+GPIO.output(17, GPIO.LOW)
 audio_queue.join()  # block until all current audio processing jobs are done
 audio_queue.put(None)  # tell the recognize_thread to stop
 recognize_thread.join()  # wait for the recognize_thread to actually stop
