@@ -76,6 +76,7 @@ with sr.Microphone() as source:
         pass
 
 GPIO.output(17, GPIO.LOW)
+GPIO.output(27, GPIO.LOW)
 audio_queue.join()  # block until all current audio processing jobs are done
 audio_queue.put(None)  # tell the recognize_thread to stop
 recognize_thread.join()  # wait for the recognize_thread to actually stop
