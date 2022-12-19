@@ -1,23 +1,16 @@
-#!/usr/bin/env python3
-
-# NOTE: this example requires PyAudio because it uses the Microphone class
-
 import speech_recognition as sr
 from threading import Thread
-from queue import Queue  # Python 3 import
+from queue import Queue
 import subprocess
 import time
 import RPi.GPIO as GPIO
 
 
+# GPIO setup for leds
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
 GPIO.setup(17, GPIO.OUT)
 GPIO.setup(27, GPIO.OUT)
-
-
-r = sr.Recognizer()
-audio_queue = Queue()
 
 
 def recognize_worker():
@@ -28,7 +21,7 @@ def recognize_worker():
         if audio is None:
             break  # stop processing if the main thread is done
 
-        GPIO.output(27, GPIO.HIGH)
+        GPIO.output(27, GPIO.HIGH) # turn on the led
         print("processing...")
         # received audio data, now we'll recognize it using Google Speech Recognition
         try:
@@ -38,6 +31,7 @@ def recognize_worker():
             result = r.recognize_google(audio, language="tr-TR")
             result = result.lower()
 
+            # press the corresponding key depending on the voice command
             if 'sol' in result:
                 subprocess.run(['xdotool', 'key', 'Left'])
             elif 'sağ' in result:
@@ -53,28 +47,37 @@ def recognize_worker():
                 "Could not request results from Google Speech Recognition service; {0}".format(e))
 
         audio_queue.task_done()  # mark the audio processing job as completed in the queue
-        GPIO.output(27, GPIO.LOW)
+        GPIO.output(27, GPIO.LOW) # turn off the led
+
+
+# create recognizer and queue
+r = sr.Recognizer()
+audio_queue = Queue()
 
 
 # start a new thread to recognize audio, while this thread focuses on listening
 recognize_thread = Thread(target=recognize_worker)
 recognize_thread.daemon = True
 recognize_thread.start()
+
 with sr.Microphone() as source:
     try:
         while True:  # repeatedly listen for phrases and put the resulting audio on the audio processing job queue
-            GPIO.output(17, GPIO.HIGH)
+            GPIO.output(17, GPIO.HIGH)  # turn on the led
             try:
                 print('listening...')
+                # listen for input
                 rec = r.listen(source, timeout=1, phrase_time_limit=10)
+                # add recording to queue for worker to process
                 audio_queue.put(rec)
             except sr.WaitTimeoutError:
                 print('timeout reached')
-            GPIO.output(17, GPIO.LOW)
+            GPIO.output(17, GPIO.LOW)  # turn off the led
             time.sleep(1)
     except KeyboardInterrupt:  # allow Ctrl + C to shut down the program
         pass
 
+# turn off the leds
 GPIO.output(17, GPIO.LOW)
 GPIO.output(27, GPIO.LOW)
 audio_queue.join()  # block until all current audio processing jobs are done
