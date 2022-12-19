@@ -9,8 +9,8 @@ import RPi.GPIO as GPIO
 # GPIO setup for leds
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
-GPIO.setup(17, GPIO.OUT)
-GPIO.setup(27, GPIO.OUT)
+GPIO.setup(17, GPIO.OUT) # led for listening
+GPIO.setup(27, GPIO.OUT) # led for processing
 
 
 def recognize_worker():
@@ -33,12 +33,16 @@ def recognize_worker():
 
             # press the corresponding key depending on the voice command
             if 'sol' in result:
+                print('pressing left button')
                 subprocess.run(['xdotool', 'key', 'Left'])
             elif 'sağ' in result:
+                print('pressing right button')
                 subprocess.run(['xdotool', 'key', 'Right'])
             elif 'aşağı' in result:
+                print('pressing down button')
                 subprocess.run(['xdotool', 'key', 'Down'])
             elif 'yukarı' in result:
+                print('pressing up button')
                 subprocess.run(['xdotool', 'key', 'Up'])
         except sr.UnknownValueError:
             print("Google Speech Recognition could not understand audio")
