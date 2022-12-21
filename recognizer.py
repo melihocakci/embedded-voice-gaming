@@ -6,32 +6,30 @@ import time
 import RPi.GPIO as GPIO
 
 
-# GPIO setup for leds
+# LEDler için GPIO hazırlığı
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
-GPIO.setup(17, GPIO.OUT) # led for listening
-GPIO.setup(27, GPIO.OUT) # led for processing
+GPIO.setup(17, GPIO.OUT) # Ses kaydı için LED
+GPIO.setup(27, GPIO.OUT) # Ses işlenmesi için LED
 
 
-def recognize_worker():
-    # this runs in a background thread
+def recognize_worker(): # Ses tanıma kodu
+    # Bu kod arkaplandaki bir threadde çalışmaktadır.
     while True:
         time.sleep(0.2)
-        audio = audio_queue.get()  # retrieve the next audio processing job from the main thread
+        audio = audio_queue.get()  # Ana thread üzerinden sıradaki işlenecek sesi al
         if audio is None:
-            break  # stop processing if the main thread is done
+            break  # Eğer bir ses kaydedilmemişse ana thread durmuştur ve bu thread de sonlandırılır.
 
-        GPIO.output(27, GPIO.HIGH) # turn on the led
+        GPIO.output(27, GPIO.HIGH) # İşleme LEDini yak
         print("processing...")
-        # received audio data, now we'll recognize it using Google Speech Recognition
+        # Google'ın ses tanıma kütüphanesini kullanarak kaydedilen sesi tanımaya çalışıyoruz.
         try:
-            # for testing purposes, we're just using the default API key
-            # to use another API key, use `r.recognize_google(audio, key="GOOGLE_SPEECH_RECOGNITION_API_KEY")`
-            # instead of `r.recognize_google(audio)`
             result = r.recognize_google(audio, language="tr-TR")
-            result = result.lower()
+            result = result.lower() # Kaydedilen seste söylenilen kelime result adlı
+                                    # değişkende küçük harflerle saklanılır.
 
-            # press the corresponding key depending on the voice command
+            # Gelen ses aşağıdaki kelimelerden birini içeriyorsa ona uygun komut oluşturulur.
             if 'sol' in result:
                 print('pressing left button')
                 subprocess.run(['xdotool', 'key', 'Left'])
@@ -45,45 +43,48 @@ def recognize_worker():
                 print('pressing up button')
                 subprocess.run(['xdotool', 'key', 'Up'])
         except sr.UnknownValueError:
+            # Ses tanınamadıysa bu hata mesajı gösterilir.
             print("Google Speech Recognition could not understand audio")
         except sr.RequestError as e:
+            # Bir sebepten dolayı Google Ses Tanıma servisine erişilemiyorsa bu hata mesajı gösterilir.
             print(
                 "Could not request results from Google Speech Recognition service; {0}".format(e))
 
-        audio_queue.task_done()  # mark the audio processing job as completed in the queue
-        GPIO.output(27, GPIO.LOW) # turn off the led
+        audio_queue.task_done()  # Sırada işlenen bu ses dosyasını tamamlandı olarak işaretle.
+        GPIO.output(27, GPIO.LOW) # Ses işleme bittikten sonra LED söndürülür.
 
 
-# create recognizer and queue
+# Ses tanıyıcıyı ve ses sırasını yaratıyoruz.
 r = sr.Recognizer()
 audio_queue = Queue()
 
-
-# start a new thread to recognize audio, while this thread focuses on listening
-recognize_thread = Thread(target=recognize_worker)
+# Sistemin gecikmesini azaltmak amacıyla ses tanımayı farklı bir thread üzerinde
+# çalıştırmalıyız, böylece bu ana thread sesi kaydetmeye odaklanabilmektedir.
+recognize_thread = Thread(target=recognize_worker) # Yukarıda yazmış olduğumuz fonksiyonu threade atıyoruz.
 recognize_thread.daemon = True
 recognize_thread.start()
 
+# Ses tanıma değişkenine kaynak olarak cihazın mikrofonunu kullanmasını söylüyoruz.
 with sr.Microphone() as source:
     try:
-        while True:  # repeatedly listen for phrases and put the resulting audio on the audio processing job queue
-            GPIO.output(17, GPIO.HIGH)  # turn on the led
+        while True:  # Durmadan mikrofondan gelen sesi dinliyoruz ve bir ses gelirse bunu ses tanıma sırasına sokuyoruz.
+            GPIO.output(17, GPIO.HIGH)  # Ses kaydetme LEDini yakıyoruz.
             try:
                 print('listening...')
-                # listen for input
+                # Mikrofondan bir ses bekliyoruz.
                 rec = r.listen(source, timeout=1, phrase_time_limit=10)
-                # add recording to queue for worker to process
+                # Ses kaydını ses tanıma sırasına sokuyoruz.
                 audio_queue.put(rec)
             except sr.WaitTimeoutError:
                 print('timeout reached')
-            GPIO.output(17, GPIO.LOW)  # turn off the led
+            GPIO.output(17, GPIO.LOW)  # Ses kaydetme LEDini söndürüyoruz
             time.sleep(1)
-    except KeyboardInterrupt:  # allow Ctrl + C to shut down the program
+    except KeyboardInterrupt:  # Klavyede "Ctrl + C" tuşlarına basıldığında programın sonlandırılmasını sağlıyoruz.
         pass
 
-# turn off the leds
+# Programın çalışması bittiğinde LEDleri söndürüyoruz.
 GPIO.output(17, GPIO.LOW)
 GPIO.output(27, GPIO.LOW)
-audio_queue.join()  # block until all current audio processing jobs are done
-audio_queue.put(None)  # tell the recognize_thread to stop
-recognize_thread.join()  # wait for the recognize_thread to actually stop
+audio_queue.join()  # Bütün ses tanıma işlemleri bitene kadar bekliyoruz.
+audio_queue.put(None)  # Ses tanıma threadini durdurmaya başlıyoruz.
+recognize_thread.join()  # Ses tanıma thredinin durdurulmasını bekliyoruz.
